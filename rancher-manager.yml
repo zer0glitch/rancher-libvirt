@@ -1,0 +1,72 @@
+---
+- hosts: localhost
+  tasks:
+
+  - name: download and rancher tools
+    unarchive:
+      src: https://github.com/rancher/cli/releases/download/v2.7.0/rancher-linux-amd64-v2.7.0.tar.gz
+      dest: /usr/local/bin
+      remote_src: yes
+      mode: 0755
+
+  - name: link
+    file:
+      src: /usr/local/bin/rancher-v2.7.0/rancher
+      dest: /usr/local/bin/rancher
+      state: link
+
+  - name: extract file
+    fail: msg="fail"
+
+  - name: replace
+    shell: rm -rf /etc/yum.repos.d/docker-ce.repo
+
+  - name: add docker repo
+    shell: |
+      dnf -y install dnf-plugins-core
+      dnf config-manager \
+        --add-repo \
+        https://download.docker.com/linux/fedora/docker-ce.repo
+
+  - name: install docker tools
+    dnf:
+      state: installed
+      name:
+      - docker-ce 
+      - docker-ce-cli 
+      - containerd.io 
+      - docker-buildx-plugin 
+      - docker-compose-plugin
+      - vim
+
+  - name: add dockerroot
+    ansible.builtin.group:
+      name: dockerroot
+      state: present
+
+  - name: add docker user
+    user:
+      name: docker
+      groups: docker,dockerroot
+
+  - name: set damemon.json
+    copy:
+      dest: /etc/docker/daemon.json
+      content: |
+        {
+          "group": "dockerroot"
+        }
+
+  - name: start and enable docker
+    service:
+      name: docker
+      state: started
+      enabled: True
+
+  - name: Launch node agent
+    shell: |
+      docker run -d --restart=unless-stopped -p 8888:80 -p 8843:443 --privileged docker.io/rancher/rancher:latest
+    register: out
+    until: "'Bootstrap Password' in out.stdout"
+    retries: 60
+    delay: 5

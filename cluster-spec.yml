@@ -1,0 +1,75 @@
+agentImageOverride: ''
+answers: {}
+clusterSecrets: {}
+clusterTemplateName: cattle-global-data:ct-n9x7t
+clusterTemplateRevisionName: cattle-global-data:ctr-8cpdt
+description: ''
+desiredAgentImage: ''
+desiredAuthImage: ''
+displayName: singlenode
+dockerRootDir: /var/lib/docker
+enableClusterAlerting: false
+enableClusterMonitoring: false
+enableNetworkPolicy: false
+fleetWorkspaceName: fleet-default
+internal: false
+localClusterAuthEndpoint:
+  enabled: true
+rancherKubernetesEngineConfig:
+  addonJobTimeout: 45
+  authentication:
+    strategy: x509|webhook
+  authorization: {}
+  bastionHost: {}
+  cloudProvider: {}
+  dns:
+    nodelocal: {}
+  enableCriDockerd: true
+  ignoreDockerVersion: true
+  ingress:
+    defaultBackend: false
+    defaultIngressClass: true
+    provider: nginx
+  kubernetesVersion: v1.24.9-rancher1-1
+  monitoring:
+    provider: metrics-server
+    replicas: 1
+  network:
+    options:
+      flannel_backend_type: vxlan
+    plugin: canal
+  restore: {}
+  rotateEncryptionKey: false
+  services:
+    etcd:
+      backupConfig:
+        enabled: true
+        intervalHours: 12
+        retention: 6
+        s3BackupConfig: null
+        timeout: 300
+      creation: 12h
+      extraArgs:
+        election-timeout: '5000'
+        heartbeat-interval: '500'
+      retention: 72h
+      snapshot: false
+    kubeApi:
+      secretsEncryptionConfig: {}
+      serviceNodePortRange: 30000-32767
+    kubeController: {}
+    kubelet: {}
+    kubeproxy: {}
+    scheduler: {}
+  sshAgentAuth: false
+  systemImages: {}
+  upgradeStrategy:
+    drain: false
+    maxUnavailableControlplane: '1'
+    maxUnavailableWorker: 10%
+    nodeDrainInput:
+      gracePeriod: -1
+      ignoreDaemonSets: true
+      timeout: 120
+scheduledClusterScan: {}
+windowsPreferedCluster: false

@@ -1,0 +1,50 @@
+---
+- name: Get VMs list
+  community.libvirt.virt:
+    command: list_vms
+  register: existing_vms
+  changed_when: no
+
+- name: Create VM if not exists
+  block:
+  # tasks file for rancher_kvm_provision
+  #
+  - name: Copy base image to libvirt directory
+    copy:
+      dest: "{{ libvirt_pool_dir }}/{{ vm_name }}.qcow2"
+      src: "/var/lib/libvirt/images/{{ boot_image }}"
+      force: no
+      remote_src: yes
+      mode: 0660
+    register: copy_results
+
+  - name: Define vm
+    community.libvirt.virt:
+      command: define
+      xml: "{{ lookup('template', 'vm-template.xml.j2') }}"
+
+  - name: Configure the image
+    command: |
+      virt-customize -a {{ libvirt_pool_dir }}/{{ boot_image }} \
+      --hostname {{ vm_name }} \
+      --root-password password:{{ vm_root_pass }} \
+      --ssh-inject 'root:file:{{ ssh_key }}' \
+      --uninstall cloud-init --selinux-relabel
+    when: copy_results is changed
+
+      #  - name: resize drive
+      #    command: "qemu-img resize {{libvirt_pool_dir}}/{{vm_name}}.qcow2 +100G"
+  
+  - name: Ensure VM is started
+    community.libvirt.virt:
+      name: "{{ vm_name }}"
+      state: running
+    register: vm_start_results
+    until: "vm_start_results is success"
+    retries: 15
+    delay: 2
+
+  - name: resize block
+    command: "virsh blockresize --domain {{vm_name}} --path vda --size 100G"
+  
+  when: "vm_name not in existing_vms.list_vms"

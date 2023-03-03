@@ -1,0 +1,10 @@
+Access Key
+token-zg589
+Secret Key
+554kmwdvc4ktf7pzghwfgwdj996vmfqzzbgq9ktws55wdp8qq5qf4x
+
+Access Key and Secret Key can be sent as the username and password for HTTP Basic auth to authorize requests. You can also combine them to use as a Bearer token:
+Bearer Token
+token-zg589:554kmwdvc4ktf7pzghwfgwdj996vmfqzzbgq9ktws55wdp8qq5qf4x
+Save the info above! This is the only time you'll be able to see it. If you lose it, you'll need to create a new API key.
+

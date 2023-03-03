@@ -1,0 +1,35 @@
+#ansible-galaxy install geerlingguy.nfs
+--- 
+- hosts: localhost
+  tasks:
+  - name: install and configure nfs server
+    import_role:
+      name: { role: geerlingguy.nfs }
+    vars:
+      nfs_exports:  
+        #- "/mnt/k8s_nfs_storage 10.24.2.0/24(rw,sync,no_subtree_check)" 
+        #- "/mnt/k8s_nfs_storage 192.168.122.0/24(rw,sync,no_subtree_check)" 
+      - "/mnt/k8s_nfs_storage *(rw,sync,no_subtree_check)" 
+      nfs_rpcbind_state: started
+      nfs_rpcbind_enabled: true
+
+  - name: create nfs directory
+    file:
+      path: /mnt/k8s_nfs_storage
+      state: directory
+      owner: nobody
+      group: nobody
+      mode: 0777
+
+  - name: open fireall for nfs
+    shell: |
+      firewall-cmd --permanent --add-service=nfs
+      firewall-cmd --permanent --add-service=mountd
+      firewall-cmd --permanent --add-service=rpc-bind
+      firewall-cmd --permanent --add-port=2500/tcp
+      firewall-cmd --permanent --add-port=2500/udp
+      firewall-cmd --permanent --add-port=2501/tcp
+      firewall-cmd --permanent --add-port=2501/udp
+      firewall-cmd --reload
+      systemctl restart rpc-statd.service
+      systemctl restart nfs-server.service

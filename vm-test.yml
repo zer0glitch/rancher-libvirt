@@ -1,0 +1,159 @@
+---
+- hosts: localhost
+  tasks:
+      #base_image_url: https://download.fedoraproject.org/pub/fedora/linux/releases/34/Cloud/x86_64/images/{{ base_image_name }}
+      #base_image_sha: b9b621b26725ba95442d9a56cbaa054784e0779a9522ec6eafff07c6e6f717ea
+  - set_fact:
+      vm_list:
+        - name:  rancher1
+          #- name:  rancher2
+          #- name:  rancher3
+      base_image_name: Fedora-Cloud-Base-37-1.7.x86_64.qcow2
+      pool_dir: "/var/lib/libvirt/images"
+        #vm: rancher1
+      vcpus: 2
+      ram_mb: 8096
+      net: default
+      vm_root_pass: test123
+      cleanup_tmp: no
+      ssh_pub_key: /root/.ssh/id_rsa.pub
+
+  - name: KVM Provision role
+    include_role:
+      name: rancher_kvm_provision
+    vars:
+      boot_image: "{{ base_image_name }}"
+      libvirt_pool_dir: "{{ pool_dir }}"
+      vm_name: "{{ item.name }}"
+      vm_vcpus: "{{ vcpus }}"
+      vm_ram_mb: "{{ ram_mb }}"
+      vm_net: "{{ net }}"
+      cleanup_tmp: "{{ cleanup }}"
+      ssh_key: "{{ ssh_pub_key }}"
+    loop: "{{ vm_list }}"
+
+
+      #- name: List all VMs
+      #community.libvirt.virt:
+      #name: f34-dev
+      #command: info
+      #register: all_vms
+
+  - name: get IP address
+    shell: "virsh domifaddr {{ item.name }} | grep -m 1 vnet | awk '{print $4}'"
+    register: ip_address
+    loop: "{{ vm_list }}"
+    until: ip_address.stdout|length > 0
+    delay: 10
+    retries: 60
+
+  - debug: 
+      msg: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+  - name: "resize partition"
+    shell: |
+      #parted -s -a opt /dev/vda "resizepart 5 100%"
+      growpart /dev/vda 5
+      parted -s -a opt /dev/vda "print free"
+      btrfs filesystem resize max /
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+      #- set_fact:
+      #libvirt_ip: "{{ ip_address.stdout }}"
+
+        #- debug: var=libvirt_ip
+        #
+        #
+        #- name: configure ip address
+        #shell: |
+        #nmcli con mod 'Wired connection 1' ipv4.addresses 10.24.2.10/24
+        #nmcli con mod 'Wired connection 1' ipv4.gateway 10.24.2.1
+        #nmcli con mod 'Wired connection 1' ipv4.dns “8.8.8.8”
+        #nmcli con mod 'Wired connection 1' ipv4.method manual
+        #nmcli con down 'Wired connection 1'
+        #nmcli con up 'Wired connection 1'
+        #delegate_to: "{{ libvirt_ip }}"
+
+  - name: replace
+    #shell: sed -i 's/\$releasever/34/g' /etc/yum.repos.d/docker-ce.repo
+    shell: rm -rf /etc/yum.repos.d/docker-ce.repo
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+  - name: add docker repo
+    shell: |
+      dnf -y install dnf-plugins-core
+      dnf config-manager \
+        --add-repo \
+        https://download.docker.com/linux/fedora/docker-ce.repo
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+      #- name: link kubernets to containers
+      #file:
+      #path: /etc/kubernetes
+      #state: absent
+      #delegate_to: "{{ item.stdout.split('/')[0] }}"
+      #loop: "{{ ip_address.results }}"
+
+  - name: install docker tools
+    dnf:
+      state: installed
+      name:
+      - docker-ce 
+      - docker-ce-cli 
+      - containerd.io 
+      - docker-buildx-plugin 
+      - docker-compose-plugin
+      - vim
+      - nfs-utils
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+
+  - name: add dockerroot
+    ansible.builtin.group:
+      name: dockerroot
+      state: present
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+  - name: add docker user
+    user:
+      name: docker
+      groups: docker,dockerroot
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+  - name: set damemon.json
+    copy:
+      dest: /etc/docker/daemon.json
+      content: |
+        {
+          "group": "dockerroot"
+        }
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+  - name: start and enable docker
+    service:
+      name: docker
+      state: started
+      enabled: True
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
+
+      #- name: Launch podman
+      #shell: |
+      #podman stop --all
+      #podman rm --all
+      #delegate_to: "{{ item.stdout.split('/')[0] }}"
+      #loop: "{{ ip_address.results }}"
+
+  - name: Launch node agent
+    shell: |
+      docker run -d --privileged --restart=unless-stopped --net=host -v /etc/kubernetes:/etc/kubernetes -v /var/run:/var/run  rancher/rancher-agent:v2.7.1 --server https://10.24.2.5:8843 --token lbs6vtrbc4hmqn8h9zfpj6b2jzv4llsqxcrdhdhjq8gmr6v669rpkq --ca-checksum 77b7beacf7354abe38e23ec8ed86a83a0943d9057e292f9b6c00e1dc6e678a2b --etcd --controlplane --worker
+    delegate_to: "{{ item.stdout.split('/')[0] }}"
+    loop: "{{ ip_address.results }}"
